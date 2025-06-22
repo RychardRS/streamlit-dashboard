@@ -1,0 +1,14 @@
+[theme]
+primaryColor = "#6E0B3C"          # Cor de botões e destaques
+backgroundColor = "#f8f4f9"        # Fundo principal
+secondaryBackgroundColor = "#ffffff" # Fundo de containers
+textColor = "#2D132C"              # Cor padrão do texto
+font = "sans serif"
+
+
+[server]
+headless = true
+
+[client]
+showSidebarNavigation = false
+toolbarMode = "minimal"
