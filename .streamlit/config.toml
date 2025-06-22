@@ -12,3 +12,11 @@ headless = true
 [client]
 showSidebarNavigation = false
 toolbarMode = "minimal"
+
+
+[browser]
+gatherUsageStats = false
+
+[ui]
+hideSidebarNav = true
+hideTopBar = true
