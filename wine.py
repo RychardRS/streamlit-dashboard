@@ -2,129 +2,155 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import numpy as np
 import os
 
-default_csv_path = os.path.join(os.path.dirname(__file__), 'WineQT.csv')
+st.set_page_config(
+    page_title="Análise de Vinhos",
+    layout="wide",                    
+    initial_sidebar_state="collapsed"
+)
 
-# Upload CSV
+st.title("Análise Exploratória - Qualidade de Vinhos 🍷")
+st.markdown("""
+### Disciplina: Ciência de Dados  
+**Grupo:**  
+- Rychardson Ribeiro de Souza  
+- Pedro Henrique Leite Santos
+
+---  
+""")
+
+default_csv_path = os.path.join(os.path.dirname(__file__), "WineQT.csv")
+
 st.sidebar.title("Upload dos Dados")
-uploaded_file = st.sidebar.file_uploader("Faça upload do arquivo winequality-red.csv", type=["csv"])
+uploaded_file = st.sidebar.file_uploader(
+    "Faça upload do arquivo winequality-red.csv", type=["csv"]
+)
 
-if uploaded_file is not None:
+if uploaded_file:
     df = pd.read_csv(uploaded_file)
 else:
-    st.sidebar.info("Nenhum arquivo enviado, carregando arquivo padrão do sistema.")
+    st.sidebar.info("Nenhum arquivo enviado — usando o CSV padrão.")
     df = pd.read_csv(default_csv_path)
 
-# Remove a coluna 'Id' se existir
-if 'Id' in df.columns:
-    df.drop(columns=['Id'], inplace=True)
+# Remove coluna “Id”, caso exista
+df = df.drop(columns=["Id"], errors="ignore")
+numeric_cols = df.select_dtypes("number").columns
 
-numeric_columns = df.select_dtypes(include='number').columns
+def plot_centered(fig):
+    st.markdown(
+        "<div style='max-width:75%;margin:0 auto;'>",
+        unsafe_allow_html=True,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+def dataframe_centered(data):
+    st.markdown(
+        "<div style='max-width:75%;margin:0 auto;'>",
+        unsafe_allow_html=True,
+    )
+    st.dataframe(data, use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # Captura o parâmetro 'grafico' da URL
-query_params = st.query_params
-grafico = query_params.get('grafico', 'all')
+grafico = st.query_params.get("grafico", "all")
 
-# Visualização inicial
-if grafico in ['all', 'dataframe']:
+# Visualização inicial do dataframe
+if grafico in ("all", "dataframe"):
     st.subheader("Visualização Inicial dos Dados")
-    st.dataframe(df.head())
+    dataframe_centered(df.head())
 
 # Distribuição da Qualidade
-if grafico in ['all', 'distribuicao']:
+if grafico in ("all", "distribuicao"):
     st.subheader("Distribuição da Qualidade do Vinho")
-    fig1 = px.histogram(df, x='quality', color_discrete_sequence=['#6E0B3C'])
-    st.plotly_chart(fig1, use_container_width=True)
+    fig = px.histogram(df, x="quality", color_discrete_sequence=["#6E0B3C"])
+    plot_centered(fig)
 
 # Histograma de Variáveis
-if grafico in ['all', 'histograma']:
+if grafico in ("all", "histograma"):
     st.subheader("Histogramas das Variáveis Numéricas")
-    selected_col = st.selectbox("Selecione uma coluna para o histograma", numeric_columns, key='hist')
-    fig2 = px.histogram(df, x=selected_col, nbins=30, color_discrete_sequence=['#4B2245'])
-    st.plotly_chart(fig2, use_container_width=True)
+    col = st.selectbox("Selecione a variável", numeric_cols, key="hist")
+    fig = px.histogram(df, x=col, nbins=30, color_discrete_sequence=["#4B2245"])
+    plot_centered(fig)
 
 # Heatmap de Correlação com valores
-if grafico in ['all', 'heatmap']:
+if grafico in ("all", "heatmap"):
     st.subheader("Mapa de Correlação entre Variáveis")
-    corr_matrix = df.corr(numeric_only=True)
-    fig3 = go.Figure(
-        data=go.Heatmap(
-            z=corr_matrix.values,
-            x=corr_matrix.columns,
-            y=corr_matrix.index[::-1],  # Mantendo a ordem da diagonal
-            colorscale='RdPu',
-            colorbar=dict(title='Correlação'),
+    corr = df.corr(numeric_only=True)
+    fig = go.Figure(
+        go.Heatmap(
+            z=corr.values,
+            x=corr.columns,
+            y=corr.index,
+            colorscale="RdPu",
             zmin=-1,
             zmax=1,
-            text=corr_matrix.round(2).values,
+            text=corr.round(2).values,
             texttemplate="%{text}",
-            showscale=True
+            colorbar=dict(title="Correlação"),
         )
     )
-    fig3.update_layout(
-        xaxis_title='Variáveis',
-        yaxis_title='Variáveis',
-        plot_bgcolor='#f8f4f9',
-        paper_bgcolor='#f8f4f9'
+    fig.update_layout(
+        xaxis_title="Variáveis",
+        yaxis_title="Variáveis",
+        plot_bgcolor="#f8f4f9",
+        paper_bgcolor="#f8f4f9",
     )
-    st.plotly_chart(fig3, use_container_width=True)
+    plot_centered(fig)
 
 # Dispersão Álcool x Qualidade
-if grafico in ['all', 'alcool_qualidade']:
-    st.subheader("Dispersão: Álcool x Qualidade")
-    fig4 = px.scatter(
+if grafico in ("all", "alcool_qualidade"):
+    st.subheader("Dispersão: Álcool × Qualidade")
+    fig = px.scatter(
         df,
-        x='alcohol',
-        y='quality',
-        color='quality',
-        opacity=0.7,
-        color_continuous_scale='RdPu'
+        x="alcohol",
+        y="quality",
+        color="quality",
+        opacity=0.75,
+        color_continuous_scale="RdPu",
     )
-    fig4.update_layout(plot_bgcolor='#f8f4f9', paper_bgcolor='#f8f4f9')
-    st.plotly_chart(fig4, use_container_width=True)
+    plot_centered(fig)
 
 # Dispersão Acidez x Qualidade
-if grafico in ['all', 'acidez_qualidade']:
-    st.subheader("Dispersão: Acidez Volátil x Qualidade")
-    fig5 = px.scatter(
+if grafico in ("all", "acidez_qualidade"):
+    st.subheader("Dispersão: Acidez Volátil × Qualidade")
+    fig = px.scatter(
         df,
-        x='volatile acidity',
-        y='quality',
-        color='quality',
-        opacity=0.7,
-        color_continuous_scale='OrRd'
+        x="volatile acidity",
+        y="quality",
+        color="quality",
+        opacity=0.75,
+        color_continuous_scale="OrRd",
     )
-    fig5.update_layout(plot_bgcolor='#f8f4f9', paper_bgcolor='#f8f4f9')
-    st.plotly_chart(fig5, use_container_width=True)
+    plot_centered(fig)
 
 # Boxplots horizontais
-if grafico in ['all', 'boxplot']:
+if grafico in ("all", "boxplot"):
     st.subheader("Boxplots Horizontais das Variáveis Numéricas")
-    for col in numeric_columns:
-        if col != 'quality':
-            fig6 = px.box(
+    for col in numeric_cols:
+        if col != "quality":
+            fig = px.box(
                 df,
                 x=col,
+                orientation="h",
                 points="outliers",
-                orientation='h',
-                color_discrete_sequence=['#6E0B3C']
+                color_discrete_sequence=["#6E0B3C"],
             )
-            fig6.update_layout(plot_bgcolor='#f8f4f9', paper_bgcolor='#f8f4f9', height=400)
-            st.plotly_chart(fig6, use_container_width=True)
+            fig.update_layout(height=400)
+            plot_centered(fig)
 
 # Scatter entre quaisquer duas variáveis
-if grafico in ['all', 'scatter']:
+if grafico in ("all", "scatter"):
     st.subheader("Relação entre Variáveis (Scatterplot Interativo)")
-    x_axis = st.selectbox("Selecione a variável para o eixo X", numeric_columns, index=0, key='scatter_x')
-    y_axis = st.selectbox("Selecione a variável para o eixo Y", numeric_columns, index=1, key='scatter_y')
-    fig7 = px.scatter(
+    eixo_x = st.selectbox("Eixo X", numeric_cols, key="scatter_x")
+    eixo_y = st.selectbox("Eixo Y", numeric_cols, key="scatter_y")
+    fig = px.scatter(
         df,
-        x=x_axis,
-        y=y_axis,
-        color='quality',
+        x=eixo_x,
+        y=eixo_y,
+        color="quality",
         opacity=0.7,
-        color_continuous_scale='Viridis'
+        color_continuous_scale="Viridis",
     )
-    st.plotly_chart(fig7, use_container_width=True)
+    plot_centered(fig)
