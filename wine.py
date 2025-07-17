@@ -65,10 +65,10 @@ def plot_confusion_matrix(y_true, y_pred, title, labels):
     cm = confusion_matrix(y_true, y_pred, labels=labels)
     labels_for_plot = [str(l) for l in labels]
     fig = px.imshow(cm, text_auto=True,
-                       labels=dict(x="Qualidade Prevista", y="Qualidade Real"),
-                       x=labels_for_plot,
-                       y=labels_for_plot,
-                       color_continuous_scale='RdPu')
+                    labels=dict(x="Qualidade Prevista", y="Qualidade Real"),
+                    x=labels_for_plot,
+                    y=labels_for_plot,
+                    color_continuous_scale='RdPu')
     st.plotly_chart(fig, use_container_width=True)
 
 # --- Funções de Cache para os Modelos ---
@@ -84,7 +84,14 @@ def train_model_1(df):
     y_pred = model.predict(X_test)
     
     accuracy = accuracy_score(y_test, y_pred)
-    sorted_labels = sorted(y.unique())
+    
+    # --- AJUSTE APLICADO AQUI ---
+    # Convertendo o array de labels do numpy para uma lista de inteiros nativos do Python.
+    # A função y.unique() retorna um array numpy, e os tipos de dados específicos do numpy (como numpy.int64) 
+    # podem, em casos raros, causar problemas de incompatibilidade de tipo em algumas funções do scikit-learn
+    # que esperam tipos nativos do Python. A conversão com .tolist() garante a compatibilidade.
+    sorted_labels = sorted(y.unique().tolist())
+    
     report_dict = classification_report(y_test, y_pred, labels=sorted_labels, zero_division=0, output_dict=True)
     feature_importance = pd.DataFrame({
         'feature': X.columns,
@@ -198,7 +205,7 @@ elif page == "Análise Preditiva Otimizada":
     df_cat_viz['categoria_qualidade'] = df_cat_viz['quality'].apply(categorize_quality_viz)
     st.write("**Distribuição das Novas Categorias:**")
     fig_cat_dist = px.histogram(df_cat_viz, x='categoria_qualidade', color_discrete_sequence=['#4B2245'],
-                                category_orders={"categoria_qualidade": ["Ruim", "Médio", "Excelente"]})
+                                  category_orders={"categoria_qualidade": ["Ruim", "Médio", "Excelente"]})
     st.plotly_chart(fig_cat_dist, use_container_width=True)
     
     accuracy_cat, report_cat_dict, feature_importance_cat, y_test_cat, y_pred_cat = train_model_2(df)
