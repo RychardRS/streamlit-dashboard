@@ -85,20 +85,23 @@ def train_model_1(df):
     
     accuracy = accuracy_score(y_test, y_pred)
     
+    # Para o relatório de classificação, usamos todas as labels possíveis para ter uma visão completa.
+    all_possible_labels = sorted(y.unique().tolist())
+    report_dict = classification_report(y_test, y_pred, labels=all_possible_labels, zero_division=0, output_dict=True)
+
     # --- AJUSTE APLICADO AQUI ---
-    # Convertendo o array de labels do numpy para uma lista de inteiros nativos do Python.
-    # A função y.unique() retorna um array numpy, e os tipos de dados específicos do numpy (como numpy.int64) 
-    # podem, em casos raros, causar problemas de incompatibilidade de tipo em algumas funções do scikit-learn
-    # que esperam tipos nativos do Python. A conversão com .tolist() garante a compatibilidade.
-    sorted_labels = sorted(y.unique().tolist())
+    # Para a matriz de confusão, é crucial usar apenas as labels que realmente existem
+    # nos dados de teste (y_test) ou nas previsões (y_pred) para evitar o ValueError.
+    # Combinamos os dois arrays, pegamos os valores únicos e os ordenamos.
+    labels_for_confusion_matrix = sorted(np.unique(np.concatenate((y_test, y_pred))))
     
-    report_dict = classification_report(y_test, y_pred, labels=sorted_labels, zero_division=0, output_dict=True)
     feature_importance = pd.DataFrame({
         'feature': X.columns,
         'importance': model.feature_importances_
     }).sort_values('importance', ascending=True)
     
-    return accuracy, report_dict, feature_importance, y_test, y_pred, sorted_labels
+    # Retornamos as labels corretas para a matriz de confusão.
+    return accuracy, report_dict, feature_importance, y_test, y_pred, labels_for_confusion_matrix
 
 @st.cache_data
 def train_model_2(df):
@@ -129,11 +132,19 @@ def train_model_2(df):
 
 # --- Carregamento dos Dados ---
 try:
-    default_csv_path = os.path.join(os.path.dirname(__file__), 'WineQT.csv')
+    # Tenta carregar o arquivo do mesmo diretório do script.
+    # Isso torna o script mais portável.
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    default_csv_path = os.path.join(base_dir, 'WineQT.csv')
     df = pd.read_csv(default_csv_path)
-except FileNotFoundError:
-    st.error("Arquivo 'WineQT.csv' não encontrado. Por favor, coloque o arquivo na mesma pasta do script.")
-    st.stop()
+except (FileNotFoundError, NameError):
+    # Fallback para o caso de estar rodando em um ambiente onde __file__ não é definido (ex: alguns notebooks)
+    try:
+        df = pd.read_csv('WineQT.csv')
+    except FileNotFoundError:
+        st.error("Arquivo 'WineQT.csv' não encontrado. Por favor, coloque o arquivo na mesma pasta do script.")
+        st.stop()
+
 
 if 'Id' in df.columns:
     df.drop(columns=['Id'], inplace=True)
@@ -256,13 +267,13 @@ elif page == "Conclusões e Comparativo":
     st.info("""
     **Insight 1: O Salto de Performance**
     
-    O agrupamento das classes de qualidade em 'Ruim', 'Médio' e 'Excelente' resultou em um **aumento drástico na acurácia**, saltando de **~72% para ~90%**. Isso prova que simplificar o problema para o modelo, tornando-o mais balanceado e com classes mais distintas, é uma estratégia extremamente eficaz.
+    O agrupamento das classes de qualidade em 'Ruim', 'Médio' e 'Excelente' resultou em um **aumento drástico na acurácia**, saltando de **~69% para ~90%**. Isso prova que simplificar o problema para o modelo, tornando-o mais balanceado e com classes mais distintas, é uma estratégia extremamente eficaz.
     """)
     
     st.info("""
     **Insight 2: A Mudança na Importância das Características**
     
-    No modelo preditivo original, o **álcool** era o fator mais importante para diferenciar notas muito próximas (como 5 de 6). No modelo otimizado, a **acidez volátil** ganhou destaque. Isso sugere que a acidez volátil é um forte indicador para separar os vinhos nos extremos (especialmente os 'Ruins' dos 'Médios'), enquanto o álcool é mais útil para um ajuste fino da qualidade.
+    No modelo preditivo original, o **álcool** era o fator mais importante para diferenciar notas muito próximas (como 5 de 6). No modelo otimizado, os **sulfatos** e a **acidez volátil** ganharam destaque. Isso sugere que esses componentes são fortes indicadores para separar os vinhos nos extremos (especialmente os 'Ruins' dos 'Excelentes'), enquanto o álcool é mais útil para um ajuste fino da qualidade.
     """)
     
     st.info("""
