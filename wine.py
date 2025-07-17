@@ -62,13 +62,21 @@ def plot_confusion_matrix(y_true, y_pred, title, labels):
     """Gera o gráfico da matriz de confusão."""
     st.write(f"**{title}:**")
     st.write("Mostra os acertos e erros do modelo. A diagonal principal representa as classificações corretas.")
+    # Converta y_true, y_pred e labels para o mesmo tipo
+    if all(isinstance(l, str) for l in labels):
+        y_true = [str(x) for x in y_true]
+        y_pred = [str(x) for x in y_pred]
+        labels_for_plot = [str(l) for l in labels]
+    else:
+        y_true = [int(x) for x in y_true]
+        y_pred = [int(x) for x in y_pred]
+        labels_for_plot = [int(l) for l in labels]
     cm = confusion_matrix(y_true, y_pred, labels=labels)
-    labels_for_plot = [str(l) for l in labels]
     fig = px.imshow(cm, text_auto=True,
-                    labels=dict(x="Qualidade Prevista", y="Qualidade Real"),
-                    x=labels_for_plot,
-                    y=labels_for_plot,
-                    color_continuous_scale='RdPu')
+                       labels=dict(x="Qualidade Prevista", y="Qualidade Real"),
+                       x=labels_for_plot,
+                       y=labels_for_plot,
+                       color_continuous_scale='RdPu')
     st.plotly_chart(fig, use_container_width=True)
 
 # --- Funções de Cache para os Modelos ---
