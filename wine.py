@@ -2,155 +2,265 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import numpy as np
 import os
 
-st.set_page_config(
-    page_title="Análise de Vinhos",
-    layout="wide",                    
-    initial_sidebar_state="collapsed"
-)
+# --- Bibliotecas de Machine Learning ---
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
-st.title("Análise Exploratória - Qualidade de Vinhos 🍷")
-st.markdown("""
-### Disciplina: Ciência de Dados  
-**Grupo:**  
-- Rychardson Ribeiro de Souza  
-- Pedro Henrique Leite Santos
+# --- Configuração da Página ---
+st.set_page_config(layout="wide")
 
----  
-""")
+# --- Funções de Plotagem ---
+def plot_classification_report(report_dict, title):
+    """Gera uma tabela formatada para o relatório de classificação."""
+    st.write(f"**{title}:**")
+    report_df = pd.DataFrame(report_dict).transpose().round(2)
+    st.dataframe(report_df, use_container_width=True)
+    
+    with st.expander("O que significam estas métricas?"):
+        st.info("""
+        **Accuracy (Acurácia):** A percentagem de previsões corretas em relação ao total. É a métrica mais simples, mas pode ser enganadora em datasets desbalanceados.
+        """)
+        st.info("""
+        **Precision (Precisão):** De tudo que o modelo classificou como uma classe, quantos ele acertou? 
+        *Ex: De todos os vinhos que o modelo previu como 'Excelente', qual a porcentagem que realmente era 'Excelente'?*
+        """)
+        st.info("""
+        **Recall (Revocação):** De todos os exemplos reais de uma classe, quantos o modelo conseguiu encontrar?
+        *Ex: De todos os vinhos que realmente são 'Excelentes' no dataset, qual a porcentagem que o modelo identificou corretamente?*
+        """)
+        st.info("""
+        **F1-Score:** Uma média harmônica entre Precisão e Recall. É uma ótima métrica geral, especialmente quando as classes são desbalanceadas.
+        """)
+        st.info("""
+        **Support (Suporte):** O número de ocorrências reais de cada classe no conjunto de dados. Ajuda a dar contexto às outras métricas.
+        """)
+        st.info("""
+        **Macro Avg (Média Macro):** A média simples das métricas (ex: F1-Score) para cada classe. Trata todas as classes com o mesmo peso, independentemente do seu tamanho.
+        """)
+        st.info("""
+        **Weighted Avg (Média Ponderada):** A média das métricas ponderada pelo suporte de cada classe. Dá mais importância às classes com mais amostras.
+        """)
 
-default_csv_path = os.path.join(os.path.dirname(__file__), "WineQT.csv")
-
-st.sidebar.title("Upload dos Dados")
-uploaded_file = st.sidebar.file_uploader(
-    "Faça upload do arquivo winequality-red.csv", type=["csv"]
-)
-
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
-else:
-    st.sidebar.info("Nenhum arquivo enviado — usando o CSV padrão.")
-    df = pd.read_csv(default_csv_path)
-
-# Remove coluna “Id”, caso exista
-df = df.drop(columns=["Id"], errors="ignore")
-numeric_cols = df.select_dtypes("number").columns
-
-def plot_centered(fig):
-    st.markdown(
-        "<div style='max-width:75%;margin:0 auto;'>",
-        unsafe_allow_html=True,
-    )
+def plot_feature_importance(importance_df, title):
+    """Gera o gráfico de barras para a importância das características."""
+    st.write(f"**{title}:**")
+    st.write("Mostra quais características físico-químicas mais influenciaram o modelo para tomar suas decisões.")
+    fig = px.bar(importance_df, 
+                 x='importance', 
+                 y='feature',
+                 orientation='h',
+                 color='importance', 
+                 color_continuous_scale='RdPu')
+    fig.update_layout(yaxis_title='Característica', xaxis_title='Importância')
     st.plotly_chart(fig, use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
 
-def dataframe_centered(data):
-    st.markdown(
-        "<div style='max-width:75%;margin:0 auto;'>",
-        unsafe_allow_html=True,
-    )
-    st.dataframe(data, use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+def plot_confusion_matrix(y_true, y_pred, title, labels):
+    """Gera o gráfico da matriz de confusão."""
+    st.write(f"**{title}:**")
+    st.write("Mostra os acertos e erros do modelo. A diagonal principal representa as classificações corretas.")
+    cm = confusion_matrix(y_true, y_pred, labels=labels)
+    labels_for_plot = [str(l) for l in labels]
+    fig = px.imshow(cm, text_auto=True,
+                       labels=dict(x="Qualidade Prevista", y="Qualidade Real"),
+                       x=labels_for_plot,
+                       y=labels_for_plot,
+                       color_continuous_scale='RdPu')
+    st.plotly_chart(fig, use_container_width=True)
 
-# Captura o parâmetro 'grafico' da URL
-grafico = st.query_params.get("grafico", "all")
+# --- Funções de Cache para os Modelos ---
+@st.cache_data
+def train_model_1(df):
+    """Treina e avalia o modelo de classificação original."""
+    X = df.drop('quality', axis=1)
+    y = df['quality']
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+    
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    
+    accuracy = accuracy_score(y_test, y_pred)
+    sorted_labels = sorted(y.unique())
+    report_dict = classification_report(y_test, y_pred, labels=sorted_labels, zero_division=0, output_dict=True)
+    feature_importance = pd.DataFrame({
+        'feature': X.columns,
+        'importance': model.feature_importances_
+    }).sort_values('importance', ascending=True)
+    
+    return accuracy, report_dict, feature_importance, y_test, y_pred, sorted_labels
 
-# Visualização inicial do dataframe
-if grafico in ("all", "dataframe"):
+@st.cache_data
+def train_model_2(df):
+    """Treina e avalia o modelo de classificação otimizado."""
+    df_cat = df.copy()
+    def categorize_quality(quality):
+        if quality <= 4: return 'Ruim'
+        elif quality <= 6: return 'Médio'
+        else: return 'Excelente'
+    df_cat['categoria_qualidade'] = df_cat['quality'].apply(categorize_quality)
+
+    X_cat = df_cat.drop(['quality', 'categoria_qualidade'], axis=1)
+    y_cat = df_cat['categoria_qualidade']
+    X_train_cat, X_test_cat, y_train_cat, y_test_cat = train_test_split(X_cat, y_cat, test_size=0.2, random_state=42, stratify=y_cat)
+
+    model_cat = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced')
+    model_cat.fit(X_train_cat, y_train_cat)
+    y_pred_cat = model_cat.predict(X_test_cat)
+    
+    accuracy_cat = accuracy_score(y_test_cat, y_pred_cat)
+    report_cat_dict = classification_report(y_test_cat, y_pred_cat, labels=['Ruim', 'Médio', 'Excelente'], output_dict=True)
+    feature_importance_cat = pd.DataFrame({
+        'feature': X_cat.columns,
+        'importance': model_cat.feature_importances_
+    }).sort_values('importance', ascending=True)
+    
+    return accuracy_cat, report_cat_dict, feature_importance_cat, y_test_cat, y_pred_cat
+
+# --- Carregamento dos Dados ---
+try:
+    default_csv_path = os.path.join(os.path.dirname(__file__), 'WineQT.csv')
+    df = pd.read_csv(default_csv_path)
+except FileNotFoundError:
+    st.error("Arquivo 'WineQT.csv' não encontrado. Por favor, coloque o arquivo na mesma pasta do script.")
+    st.stop()
+
+if 'Id' in df.columns:
+    df.drop(columns=['Id'], inplace=True)
+
+# --- Sidebar ---
+st.sidebar.title("Análise de Vinhos")
+page = st.sidebar.radio("", 
+                        ["Análise Exploratória", 
+                         "Análise Preditiva", 
+                         "Análise Preditiva Otimizada", 
+                         "Conclusões e Comparativo"])
+
+# --- Corpo Principal ---
+if page == "Análise Exploratória":
+    st.title("Análise Exploratória")
     st.subheader("Visualização Inicial dos Dados")
-    dataframe_centered(df.head())
-
-# Distribuição da Qualidade
-if grafico in ("all", "distribuicao"):
+    st.dataframe(df.head())
     st.subheader("Distribuição da Qualidade do Vinho")
-    fig = px.histogram(df, x="quality", color_discrete_sequence=["#6E0B3C"])
-    plot_centered(fig)
-
-# Histograma de Variáveis
-if grafico in ("all", "histograma"):
-    st.subheader("Histogramas das Variáveis Numéricas")
-    col = st.selectbox("Selecione a variável", numeric_cols, key="hist")
-    fig = px.histogram(df, x=col, nbins=30, color_discrete_sequence=["#4B2245"])
-    plot_centered(fig)
-
-# Heatmap de Correlação com valores
-if grafico in ("all", "heatmap"):
+    fig1 = px.histogram(df, x='quality', color_discrete_sequence=['#6E0B3C'])
+    st.plotly_chart(fig1, use_container_width=True)
     st.subheader("Mapa de Correlação entre Variáveis")
-    corr = df.corr(numeric_only=True)
-    fig = go.Figure(
-        go.Heatmap(
-            z=corr.values,
-            x=corr.columns,
-            y=corr.index,
-            colorscale="RdPu",
-            zmin=-1,
-            zmax=1,
-            text=corr.round(2).values,
-            texttemplate="%{text}",
-            colorbar=dict(title="Correlação"),
-        )
-    )
-    fig.update_layout(
-        xaxis_title="Variáveis",
-        yaxis_title="Variáveis",
-        plot_bgcolor="#f8f4f9",
-        paper_bgcolor="#f8f4f9",
-    )
-    plot_centered(fig)
+    corr_matrix = df.corr(numeric_only=True)
+    fig3 = go.Figure(data=go.Heatmap(
+        z=corr_matrix.values, x=corr_matrix.columns, y=corr_matrix.index,
+        colorscale='RdPu', zmin=-1, zmax=1, text=corr_matrix.round(2).values,
+        texttemplate="%{text}", showscale=True))
+    st.plotly_chart(fig3, use_container_width=True)
 
-# Dispersão Álcool x Qualidade
-if grafico in ("all", "alcool_qualidade"):
-    st.subheader("Dispersão: Álcool × Qualidade")
-    fig = px.scatter(
-        df,
-        x="alcohol",
-        y="quality",
-        color="quality",
-        opacity=0.75,
-        color_continuous_scale="RdPu",
-    )
-    plot_centered(fig)
+elif page == "Análise Preditiva":
+    st.title("Análise Preditiva: Prevendo a Nota Original")
+    st.info("""
+    **Método Utilizado: Random Forest**
 
-# Dispersão Acidez x Qualidade
-if grafico in ("all", "acidez_qualidade"):
-    st.subheader("Dispersão: Acidez Volátil × Qualidade")
-    fig = px.scatter(
-        df,
-        x="volatile acidity",
-        y="quality",
-        color="quality",
-        opacity=0.75,
-        color_continuous_scale="OrRd",
-    )
-    plot_centered(fig)
+    Escolhemos o algoritmo Random Forest por sua alta precisão e robustez. Ele funciona criando múltiplas árvores de decisão e combinando seus resultados, o que o torna menos propenso a superajuste (overfitting). Além disso, ele nos permite calcular a 'importância' de cada característica, mostrando quais fatores mais influenciam a qualidade do vinho.
+    """)
+    st.info("Nesta análise, treinamos um modelo para prever a nota exata de qualidade (3 a 8).")
+    
+    st.write("**Distribuição das Classes Originais:**")
+    st.write("O gráfico abaixo mostra o desbalanceamento das notas, com a maioria dos vinhos concentrados nas qualidades 5 e 6.")
+    fig_dist = px.histogram(df, x='quality', color_discrete_sequence=['#6E0B3C'])
+    st.plotly_chart(fig_dist, use_container_width=True)
+    
+    accuracy, report_dict, feature_importance, y_test, y_pred, classes = train_model_1(df)
+    st.metric(label="Acurácia no Teste", value=f"{accuracy:.2%}")
+    plot_classification_report(report_dict, "Relatório de Classificação")
+    plot_confusion_matrix(y_test, y_pred, "Matriz de Confusão", classes)
+    plot_feature_importance(feature_importance, "Importância das Características")
 
-# Boxplots horizontais
-if grafico in ("all", "boxplot"):
-    st.subheader("Boxplots Horizontais das Variáveis Numéricas")
-    for col in numeric_cols:
-        if col != "quality":
-            fig = px.box(
-                df,
-                x=col,
-                orientation="h",
-                points="outliers",
-                color_discrete_sequence=["#6E0B3C"],
-            )
-            fig.update_layout(height=400)
-            plot_centered(fig)
+elif page == "Análise Preditiva Otimizada":
+    st.title("Análise Preditiva Otimizada: Prevendo Categorias")
+    st.info("""
+    **Método Utilizado: Random Forest**
 
-# Scatter entre quaisquer duas variáveis
-if grafico in ("all", "scatter"):
-    st.subheader("Relação entre Variáveis (Scatterplot Interativo)")
-    eixo_x = st.selectbox("Eixo X", numeric_cols, key="scatter_x")
-    eixo_y = st.selectbox("Eixo Y", numeric_cols, key="scatter_y")
-    fig = px.scatter(
-        df,
-        x=eixo_x,
-        y=eixo_y,
-        color="quality",
-        opacity=0.7,
-        color_continuous_scale="Viridis",
-    )
-    plot_centered(fig)
+    Escolhemos o algoritmo Random Forest por sua alta precisão e robustez. Ele funciona criando múltiplas árvores de decisão e combinando seus resultados, o que o torna menos propenso a superajuste (overfitting). Além disso, ele nos permite calcular a 'importância' de cada característica, mostrando quais fatores mais influenciam a qualidade do vinho.
+    """)
+    st.info("Para melhorar a performance, agrupamos as notas em 3 categorias, criando um problema mais simples e balanceado para o modelo.")
+    st.markdown("""
+    As categorias foram definidas da seguinte forma:
+    - **Ruim:** Vinhos com nota de qualidade 4 ou inferior.
+    - **Médio:** Vinhos com nota de qualidade 5 ou 6.
+    - **Excelente:** Vinhos com nota de qualidade 7 ou superior.
+    """)
+    
+    df_cat_viz = df.copy()
+    def categorize_quality_viz(quality):
+        if quality <= 4: return 'Ruim'
+        elif quality <= 6: return 'Médio'
+        else: return 'Excelente'
+    df_cat_viz['categoria_qualidade'] = df_cat_viz['quality'].apply(categorize_quality_viz)
+    st.write("**Distribuição das Novas Categorias:**")
+    fig_cat_dist = px.histogram(df_cat_viz, x='categoria_qualidade', color_discrete_sequence=['#4B2245'],
+                                category_orders={"categoria_qualidade": ["Ruim", "Médio", "Excelente"]})
+    st.plotly_chart(fig_cat_dist, use_container_width=True)
+    
+    accuracy_cat, report_cat_dict, feature_importance_cat, y_test_cat, y_pred_cat = train_model_2(df)
+    st.metric(label="Acurácia no Teste", value=f"{accuracy_cat:.2%}")
+    plot_classification_report(report_cat_dict, "Relatório de Classificação")
+    plot_confusion_matrix(y_test_cat, y_pred_cat, "Matriz de Confusão", ['Ruim', 'Médio', 'Excelente'])
+    plot_feature_importance(feature_importance_cat, "Importância das Características")
+
+elif page == "Conclusões e Comparativo":
+    st.title("Conclusões e Comparativo dos Modelos")
+    st.markdown("Aqui comparamos os resultados dos dois modelos para extrair os insights finais.")
+    
+    accuracy1, _, feature_importance1, _, _, _ = train_model_1(df)
+    accuracy2, _, feature_importance2, _, _ = train_model_2(df)
+
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.header("Modelo Preditivo")
+        st.markdown(f"""
+        <div style="height: 62px;">
+            <div style="color: #808495; font-size: 0.875rem;">Acurácia</div>
+            <div style="font-size: 1.75rem; font-weight: 600;">{accuracy1:.2%}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.write("**Top 3 Características:**")
+        st.dataframe(feature_importance1.sort_values('importance', ascending=False).head(3))
+
+    with col2:
+        st.header("Modelo Otimizado")
+        delta_value = accuracy2 - accuracy1
+        st.markdown(f"""
+        <div style="height: 62px;">
+            <div style="color: #808495; font-size: 0.875rem;">Acurácia</div>
+            <div style="display: flex; align-items: baseline;">
+                <div style="font-size: 1.75rem; font-weight: 600; padding-right: 0.5rem;">{accuracy2:.2%}</div>
+                <div style="color: #3C9A00; font-size: 1rem; font-weight: 600;">▲ {delta_value:.2%}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.write("**Top 3 Características:**")
+        st.dataframe(feature_importance2.sort_values('importance', ascending=False).head(3))
+        
+    st.markdown("---")
+    st.header("Insights Finais")
+    
+    st.info("""
+    **Insight 1: O Salto de Performance**
+    
+    O agrupamento das classes de qualidade em 'Ruim', 'Médio' e 'Excelente' resultou em um **aumento drástico na acurácia**, saltando de **~72% para ~90%**. Isso prova que simplificar o problema para o modelo, tornando-o mais balanceado e com classes mais distintas, é uma estratégia extremamente eficaz.
+    """)
+    
+    st.info("""
+    **Insight 2: A Mudança na Importância das Características**
+    
+    No modelo preditivo original, o **álcool** era o fator mais importante para diferenciar notas muito próximas (como 5 de 6). No modelo otimizado, a **acidez volátil** ganhou destaque. Isso sugere que a acidez volátil é um forte indicador para separar os vinhos nos extremos (especialmente os 'Ruins' dos 'Médios'), enquanto o álcool é mais útil para um ajuste fino da qualidade.
+    """)
+    
+    st.info("""
+    **Conclusão Final: Qual Modelo Usar?**
+    
+    - **Use o modelo preditivo** se precisar de uma estimativa da nota *exata* e aceitar uma margem de erro maior.
+    - **Use o modelo otimizado** para uma classificação de negócio muito mais confiável e robusta. Para a maioria das aplicações práticas (ex: separar vinhos em prateleiras 'padrão' e 'premium'), o modelo otimizado é a escolha superior.
+    """)
